@@ -4,15 +4,18 @@ import subprocess
 import cv2
 from PyQt5.QtWidgets import (
     QApplication, QWidget, QLabel, QPushButton, QVBoxLayout,
-    QFileDialog, QLineEdit, QTextEdit, QMessageBox
+    QFileDialog, QLineEdit, QTextEdit, QMessageBox, QProgressBar
 )
-from PyQt5.QtCore import Qt, QThread, pyqtSignal
+from PyQt5.QtGui import QFont, QIcon
+from PyQt5.QtCore import Qt, QThread, pyqtSignal, QTimer
 
 class Worker(QThread):
     # Define signals to communicate with the main thread
     progress = pyqtSignal(str)
+    log = pyqtSignal(str)
     finished = pyqtSignal()
     error = pyqtSignal(str)
+    progress_value = pyqtSignal(int)
 
     def __init__(self, companies_folder, trim_duration, ffmpeg_path):
         super().__init__()
@@ -25,7 +28,18 @@ class Worker(QThread):
             for subdir, _, files in os.walk(self.companies_folder):
                 if subdir == self.companies_folder:
                     continue
-
+                self.total_subfolders += 1
+                
+            current_folder = 0 # Initialize the current folder count
+            
+            for subdir, _, files in os.walk(self.companies_folder):
+                if subdir == self.companies_folder:
+                    continue
+                
+                current_folder += 1
+                progress_percent = int((current_folder / self.total_subfolders) * 100)
+                self.progress_value.emit(progress_percent)
+                
                 self.progress.emit(f"Processing folder: {subdir}")
 
                 # Look for an mp4 or mov file
@@ -122,6 +136,7 @@ class Worker(QThread):
                 else:
                     self.progress.emit(f"No PNG file found in {subdir}")
 
+            self.progress_value.emit(100)
             self.progress.emit("Processing complete.")
             self.finished.emit()
         except Exception as e:
@@ -133,13 +148,71 @@ class App(QWidget):
         super().__init__()
         self.setWindowTitle("Companies Folder Processor")
         self.setGeometry(100, 100, 600, 400)
+        self.setWindowIcon(QIcon('./logobrandpeak.jpg'))
         self.init_ui()
 
     def init_ui(self):
-        layout = QVBoxLayout()
-
+        layout = QVBoxLayout() # Initialize the layout first
+        
+        # Create and style the progress bar
+        self.progress_bar = QProgressBar(self)
+        self.progress_bar.setRange(0, 100)
+        self.progress_bar.setValue(0)
+        self.progress_bar.setTextVisible(False)
+        self.progress_bar.setStyleSheet("""
+            QProgressBar {
+                border: 2px solid #5c5c5c;
+                border-radius: 5px;
+                background-color: #2e2e2e;
+            }
+            QProgressBar::chunk {
+                background-color: #4caf50;
+                width: 20px;
+                margin: 1px;
+            }
+        """)
+        layout.addWidget(self.progress_bar)
+        
+        self.setStyleSheet("""
+                QWidget {
+                    background-color: #2e2e2e;
+                    color: #f0f0f0;
+                    font-family: 'Roboto', sans-serif;
+                    font-size: 14px;
+                }
+                QPushButton {
+                    background-color: #3a3a3a;
+                    border: 2px solid #5c5c5c;
+                    border-radius: 5px;
+                    padding: 5px;
+                }
+                QPushButton:hover {
+                    background-color: #505050;
+                    border: 2px solid #707070;
+                }
+                QLabel {
+                    color: #ffffff;
+                    font-weight: bold;
+                }
+                QLineEdit {
+                    background-color: #3a3a3a;
+                    border: 2px solid #5c5c5c;
+                    border-radius: 5px;
+                    padding: 5px;
+                    color: #ffffff;
+                }
+                QTextEdit {
+                    background-color: #3a3a3a;
+                    border: 2px solid #5c5c5c;
+                    border-radius: 5px;
+                    padding: 10px;
+                    color: #ffffff;
+                }
+            """)
+        
         # Select folder button
-        self.select_button = QPushButton("Select Companies Folder")
+        self.select_button = QPushButton("Select Companies Folder...")
+        self.select_button.setIcon(QIcon(''))
         self.select_button.clicked.connect(self.select_folder)
         layout.addWidget(self.select_button)
 
@@ -151,10 +224,12 @@ class App(QWidget):
         self.trim_label = QLabel("Trim Duration (seconds):")
         layout.addWidget(self.trim_label)
         self.trim_input = QLineEdit("5.96")
+        self.trim_input.setPlaceholderText("Enter trim duration in seconds")
         layout.addWidget(self.trim_input)
 
         # Start processing button
         self.start_button = QPushButton("Start Processing")
+        self.start_button.setToolTip("Click to start processing videos")
         self.start_button.clicked.connect(self.start_processing)
         self.start_button.setEnabled(False)
         layout.addWidget(self.start_button)
