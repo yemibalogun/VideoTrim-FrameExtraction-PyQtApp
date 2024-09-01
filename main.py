@@ -22,6 +22,7 @@ class Worker(QThread):
         self.companies_folder = companies_folder
         self.trim_duration = trim_duration
         self.ffmpeg_path = ffmpeg_path
+        self.total_subfolders = 0
 
     def run(self):
         try:
