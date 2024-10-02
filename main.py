@@ -34,7 +34,7 @@ class Worker(QThread):
                 
                 current_folder += 1
                 progress_percent = int((current_folder / total_subfolders) * 100)
-                self.progress_vaue.emit(progress_percent)
+                self.progress_value.emit(progress_percent)
                 self.progress.emit(f"Processing folder: {subdir}")
                 
                 # Look for video files
@@ -43,7 +43,7 @@ class Worker(QThread):
                     self.progress.emit(f"No video files found in {subdir}")
                     continue
                 for video_file in video_files:
-                    original_video_path = os.path.join(subdir, video_files)
+                    original_video_path = os.path.join(subdir, video_file)
                     trimmed_video_path = os.path.join(subdir, f'trimmed_{video_file}')
                     self.trim_and_replace_video(original_video_path, trimmed_video_path, subdir)
                     
