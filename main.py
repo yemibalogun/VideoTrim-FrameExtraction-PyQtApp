@@ -22,127 +22,92 @@ class Worker(QThread):
         self.companies_folder = companies_folder
         self.trim_duration = trim_duration
         self.ffmpeg_path = ffmpeg_path
-        self.total_subfolders = 0
 
     def run(self):
         try:
-            for subdir, _, files in os.walk(self.companies_folder):
-                if subdir == self.companies_folder:
-                    continue
-                self.total_subfolders += 1
-                
-            current_folder = 0 # Initialize the current folder count
+            total_subfolders = sum([len(files) for _, _, files in os.walk(self.companies_folder) if files])
+            current_folder = 0
             
             for subdir, _, files in os.walk(self.companies_folder):
                 if subdir == self.companies_folder:
                     continue
                 
                 current_folder += 1
-                progress_percent = int((current_folder / self.total_subfolders) * 100)
-                self.progress_value.emit(progress_percent)
-                
+                progress_percent = int((current_folder / total_subfolders) * 100)
+                self.progress_vaue.emit(progress_percent)
                 self.progress.emit(f"Processing folder: {subdir}")
-
-                # Look for an mp4 or mov file
+                
+                # Look for video files
                 video_files = [f for f in files if f.lower().endswith(('.mp4', '.mov'))]
                 if not video_files:
-                    self.progress.emit(f"No video file found in {subdir}")
+                    self.progress.emit(f"No video files found in {subdir}")
                     continue
-
-                original_video_path = os.path.join(subdir, video_files[0])
-                trimmed_video_path = os.path.join(subdir, 'trimmed_video.mp4')
-
-                # Trim the video
-                try:
-                    self.progress.emit(f"Trimming video: {original_video_path}")
-                    subprocess.run([
-                        self.ffmpeg_path, '-i', original_video_path, '-t', str(self.trim_duration),
-                        '-c', 'copy', trimmed_video_path
-                    ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    self.progress.emit(f"Trimmed video to {self.trim_duration} seconds.")
-                except subprocess.CalledProcessError as e:
-                    self.progress.emit(f"Failed to trim video in {subdir}: {e.stderr.decode().strip()}")
-                    continue
-
-                # Replace the original video with the trimmed video
-                try:
-                    os.remove(original_video_path)
-                    os.rename(trimmed_video_path, original_video_path)
-                    self.progress.emit(f"Replaced original video with trimmed video in {subdir}.")
-                except Exception as e:
-                    self.progress.emit(f"Error replacing video in {subdir}: {e}")
-                    continue
-
-                # Convert the video to H.264 - MPEG-4 AVC codec
-                converted_video_path = os.path.join(subdir, 'converted_video.mp4')
-                try:
-                    self.progress.emit(f"Converting video codec to H.264: {original_video_path}")
-                    subprocess.run([
-                        self.ffmpeg_path, '-i', original_video_path,
-                        '-vcodec', 'libx264', '-acodec', 'aac', converted_video_path
-                    ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
-                    self.progress.emit("Converted video to H.264 successfully.")
-
-                    os.remove(original_video_path)
-                    os.rename(converted_video_path, original_video_path)
-                    self.progress.emit("Replaced original video with H.264 encoded video.")
-                except subprocess.CalledProcessError as e:
-                    self.progress.emit(f"Failed to convert video in {subdir} to H.264: {e.stderr.decode().strip()}")
-                    continue
-
-                # Extract first and last frames
-                self.progress.emit(f"Extracting frames from video: {original_video_path}")
-                cap = cv2.VideoCapture(original_video_path)
-                if not cap.isOpened():
-                    self.progress.emit(f"Error opening video file {original_video_path}")
-                    continue
-
-                # Read first frame
-                ret, first_frame = cap.read()
-                if ret:
-                    first_frame_path = os.path.join(subdir, 'first_frame.jpg')
-                    cv2.imwrite(first_frame_path, first_frame)
-                    self.progress.emit(f"Saved first frame to {first_frame_path}")
-                else:
-                    self.progress.emit(f"Failed to read first frame from {original_video_path}")
-
-                # Read last frame
-                total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-                if total_frames > 0:
-                    cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - 1)
-                    ret, last_frame = cap.read()
-                    if ret:
-                        last_frame_path = os.path.join(subdir, 'last_frame.jpg')
-                        cv2.imwrite(last_frame_path, last_frame)
-                        self.progress.emit(f"Saved last frame to {last_frame_path}")
-                    else:
-                        self.progress.emit(f"Failed to read last frame from {original_video_path}")
-                else:
-                    self.progress.emit(f"No frames found in {original_video_path}")
-
-                cap.release()
-
-                # Resize PNG images
-                png_files = [f for f in files if f.lower().endswith('.png')]
-                if png_files:
-                    png_path = os.path.join(subdir, png_files[0])
-                    self.progress.emit(f"Resizing PNG image: {png_path}")
-                    png_image = cv2.imread(png_path)
-                    if png_image is not None:
-                        resized_png = cv2.resize(png_image, (1920, 1080))
-                        cv2.imwrite(png_path, resized_png)
-                        self.progress.emit(f"Resized PNG image in {subdir} to 1920x1080.")
-                    else:
-                        self.progress.emit(f"Failed to load PNG image {png_path}")
-                else:
-                    self.progress.emit(f"No PNG file found in {subdir}")
-
-            self.progress_value.emit(100)
+                for video_file in video_files:
+                    original_video_path = os.path.join(subdir, video_files)
+                    trimmed_video_path = os.path.join(subdir, f'trimmed_{video_file}')
+                    self.trim_and_replace_video(original_video_path, trimmed_video_path, subdir)
+                    
+                self.progress_value.emit(100)
+                self.progress.emit(f"Finished processing folder: {subdir}")
+                
             self.progress.emit("Processing complete.")
             self.finished.emit()
         except Exception as e:
             self.error.emit(str(e))
+    
+    def trim_and_replace_video(self, original_video_path, trimmed_video_path, subdir):
+        # Trim the video using FFmpeg
+        try:
+            self.progress.emit(f"Trimming video: {original_video_path}")
+            subprocess.run([
+                self.ffmpeg_path, '-i', original_video_path, '-t', str(self.trim_duration),
+                '-c', 'copy', trimmed_video_path
+            ], check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+            self.progress.emit(f"Trimmed video to {self.trim_duration} seconds.")
 
+            # Replace the original video with the trimmed video
+            os.remove(original_video_path)
+            os.rename(trimmed_video_path, original_video_path)
+            self.progress.emit(f"Replaced original video with trimmed video: {original_video_path}")
+
+            # Extract first and last frames
+            self.extract_frames(original_video_path, subdir, original_video_path)
+
+        except subprocess.CalledProcessError as e:
+            self.progress.emit(f"Failed to trim video {original_video_path}: {e.strderr.decode().strip()}")
+        
+    def extract_frames(self, video_path, subdir, original_video_path):
+        self.progress.emit(f"Extracting frames from video: {video_path}")
+        cap = cv2.VideoCapture(video_path)
+
+        if not cap.isOpened():
+            self.progress.emit(f"Error opening video file {video_path}")
+            return
+
+        # Read first frame
+        ret, first_frame = cap.read()
+        if ret:
+            first_frame_path = os.path.join(subdir, f"{os.path.splitext(os.path.basename(video_path))[0]}_first_frame.jpg")
+            cv2.imwrite(first_frame_path, first_frame)
+            self.progress.emit(f"Saved first frame to {first_frame_path}")
+        else:
+            self.progress.emit(f"Failed to read first frame from {video_path}")
+
+        # Read last frame
+        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+        if total_frames > 0:
+            cap.set(cv2.CAP_PROP_POS_FRAMES, total_frames - 1)
+            ret, last_frame = cap.read()
+            if ret:
+                last_frame_path = os.path.join(subdir, f"{os.path.splitext(os.path.basename(video_path))[0]}_last_frame.jpg")
+                cv2.imwrite(last_frame_path, last_frame)
+                self.progress.emit(f"Saved last frame to {last_frame_path}")
+            else:
+                self.progress.emit(f"Failed to read last frame from {video_path}")
+        else:
+            self.progress.emit(f"No frames found in {video_path}")
+
+        cap.release()
 
 class App(QWidget):
     def __init__(self):
