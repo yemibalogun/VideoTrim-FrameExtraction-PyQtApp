@@ -112,7 +112,7 @@ class Worker(QThread):
 class App(QWidget):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Companies Folder Processor")
+        self.setWindowTitle("BrandPeak1 Folder Processor")
         self.setGeometry(100, 100, 600, 400)
         self.setWindowIcon(QIcon('./logobrandpeak.jpg'))
         self.init_ui()
