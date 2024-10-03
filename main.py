@@ -237,10 +237,14 @@ class App(QWidget):
 
         # Initialize and start the worker thread
         self.worker = Worker(self.selected_folder, trim_duration, ffmpeg_path)
+        self.worker.progress_value.connect(self.update_progress_bar)
         self.worker.progress.connect(self.update_log)
         self.worker.error.connect(self.handle_error)
         self.worker.finished.connect(self.processing_finished)
         self.worker.start()
+
+    def update_progress_bar(self, value):
+        self.progress_bar.setValue(value)
 
     def update_log(self, message):
         self.log.append(message)
