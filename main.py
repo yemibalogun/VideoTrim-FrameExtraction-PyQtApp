@@ -189,7 +189,7 @@ class App(QWidget):
         # Trim duration input
         self.trim_label = QLabel("Trim Duration (seconds):")
         layout.addWidget(self.trim_label)
-        self.trim_input = QLineEdit("5.96")
+        self.trim_input = QLineEdit("6")
         self.trim_input.setPlaceholderText("Enter trim duration in seconds")
         layout.addWidget(self.trim_input)
 
